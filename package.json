@@ -1,0 +1,13 @@
+{
+  "name": "deal-tracker-browser",
+  "private": true,
+  "type": "module",
+  "scripts": {
+    "browser:install": "playwright install chromium",
+    "test": "node --test tests/browser.test.mjs"
+  },
+  "dependencies": {
+    "@modelcontextprotocol/sdk": "^1.24.0",
+    "@playwright/mcp": "0.0.84"
+  }
+}
