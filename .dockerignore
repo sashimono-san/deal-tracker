@@ -11,6 +11,7 @@
 .pytest_cache
 .ruff_cache
 data
+backups
 build
 dist
 frontend/dist

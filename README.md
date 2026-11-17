@@ -17,9 +17,9 @@ The app uses Python (FastAPI), SQLite and a React UI with TypeScript and Vite. T
 - **Operates locally:** the UI, the database, the schedules, the worker and the email outbox. The automated tests use synthetic pages and fake services.
 - **Tested with a real shop:** a visible browser collected a Massimo Dutti price on the Mac. The Linux container can also read this product and use the shop search with an Xvfb virtual display. In the container, GPT-6.1 Sol collected the reference, the price, the color, the market and the stock of this product, with `arm64` and with emulated `amd64`. One of three container checks gave no result.
 - **Known limits:** Massimo Dutti sent HTTP 403 to the headless browser. The HTTP reader got no product data from this shop.
-- **Not tested:** reliable use of Chromium's headless mode for this shop, `amd64` hardware, a scheduled VM run and email through a real SMTP provider. No homelab deployment was done.
+- **Not tested:** reliable use of Chromium's headless mode for this shop, `amd64` hardware, a scheduled VM run and email through a real SMTP provider.
 - **Defaults:** model use, worker checks and email delivery are off.
-- **Timers:** there is no timer on the Mac or on the VM.
+- **Timers:** the worker runs only when invoked. Install a scheduler for unattended use.
 
 The project notes outside this repository keep the history, the test records and the lower-level design details.
 
@@ -71,7 +71,9 @@ Git ignores the runtime data, the virtual environment and the UI build output.
 
 ### Container
 
-The [Dockerfile](Dockerfile) packages the same app. [DEPLOYMENT.md](DEPLOYMENT.md) describes a server deployment with Docker Compose. The [release workflow](.github/workflows/release.yml) publishes stable GitHub Releases to GHCR; [release-image deployment](DEPLOYMENT.md#15-release-images) does not need a source checkout on the server. Credentials remain outside the image.
+The [Dockerfile](Dockerfile) and [compose.yaml](compose.yaml) package the same app for local testing and deployment. Copy [.env.example](.env.example) to a private `.env`, then follow [Start Locally](DEPLOYMENT.md#start-locally). Compose provides its own database and pi-profile volumes; it does not use a native development database or login.
+
+For prebuilt images, use [Release Images](DEPLOYMENT.md#release-images) with [compose.release.yaml](compose.release.yaml). The [release workflow](.github/workflows/release.yml) publishes stable GitHub Releases to GHCR. A release-image deployment needs no application checkout on the server. Credentials remain outside the image.
 
 ## Configure Collection
 
@@ -104,7 +106,7 @@ The [Dockerfile](Dockerfile) packages the same app. [DEPLOYMENT.md](DEPLOYMENT.m
 | `DEAL_TRACKER_CHECK_TIMEOUT` | `120` | The time limit of one check in seconds, from 5 to 120. |
 | `DEAL_TRACKER_DAILY_CHECK_LIMIT` | `12` | The maximum number of checks in one UTC day for all searches, from 1 to 100. |
 
-The server and the worker read exported environment variables. They do not read a dotenv file. In Compose, use an environment file. Refer to [DEPLOYMENT.md](DEPLOYMENT.md#7-make-the-configuration-file). The **Connection status** dialog shows the problems in the settings. It does not show secrets.
+The server and the worker read exported environment variables. They do not read a dotenv file. The supplied Compose file loads `.env`; start with [.env.example](.env.example). See [Start Locally](DEPLOYMENT.md#start-locally). The **Connection status** dialog shows the problems in the settings. It does not show secrets.
 
 The app does not change the default model of the pi profile. It gives the provider, the model and the thinking level to pi for each check. An OAuth refresh can change the files in the pi profile. For more information, refer to the [pi documentation](https://github.com/earendil-works/pi/tree/v1.4.0/packages/coding-agent).
 
@@ -128,7 +130,7 @@ To do only one check, add `--limit 1`:
 
 A database lock prevents two batches at the same time. The daily count stays correct after a restart. If a batch reaches the daily limit, the other due checks wait for a later batch. Manual and scheduled checks use the same daily limit. This limit counts checks. It is not a money limit.
 
-To start a batch every day, use a systemd timer. Refer to [DEPLOYMENT.md](DEPLOYMENT.md#13-install-the-daily-timer).
+To start a batch every day, use the supplied [systemd units](DEPLOYMENT.md#systemd) or the [cron alternative](DEPLOYMENT.md#cron-alternative).
 
 ## Activate a Search
 

@@ -1,0 +1,14 @@
+[Unit]
+Description=Deal Tracker bounded check and delivery pass
+Requires=docker.service
+After=docker.service network-online.target
+Wants=network-online.target
+
+[Service]
+Type=oneshot
+WorkingDirectory=/opt/deal-tracker
+ExecStart=/usr/bin/docker compose --profile job run --rm -T --no-deps --name deal-tracker-job worker
+ExecStopPost=-/usr/bin/docker stop --time 150 deal-tracker-job
+ExecStopPost=-/usr/bin/docker rm -f deal-tracker-job
+TimeoutStartSec=30min
+TimeoutStopSec=3min

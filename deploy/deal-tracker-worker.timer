@@ -1,0 +1,11 @@
+[Unit]
+Description=Daily Deal Tracker check pass
+
+[Timer]
+OnCalendar=*-*-* 08:00:00 UTC
+Persistent=true
+RandomizedDelaySec=30
+Unit=deal-tracker-worker.service
+
+[Install]
+WantedBy=timers.target

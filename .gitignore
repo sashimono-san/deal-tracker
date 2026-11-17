@@ -7,6 +7,7 @@ __pycache__/
 build/
 dist/
 data/
+backups/
 .env
 .env.*
 !.env.example
