@@ -156,6 +156,66 @@ def test_local_api_rejects_forged_lineage_cross_origin_and_large_payloads(client
     assert client.get("/api/watches").json() == []
 
 
+@pytest.mark.parametrize("public_origin, backend_url, browser_origin", [
+    ("https://deals.example", "http://deals.example", "https://deals.example"),
+    ("https://DEALS.example:443/", "http://deals.example:443", "https://deals.example"),
+    ("https://deals.example:8443", "http://deals.example:8443", "https://deals.example:8443"),
+])
+def test_configured_public_origin_supports_https_proxy_reads_and_writes(
+    tmp_path, monkeypatch, public_origin, backend_url, browser_origin,
+):
+    monkeypatch.setenv("DEAL_TRACKER_PUBLIC_ORIGIN", public_origin)
+    with TestClient(create_app(tmp_path / "tracker.sqlite3"), base_url=backend_url) as proxy_client:
+        response = proxy_client.get("/api/health")
+        assert response.status_code == 200, response.text
+        response = proxy_client.post(
+            "/api/watches", json={"title": "Proxy search"},
+            headers={"Origin": browser_origin, "Sec-Fetch-Site": "same-origin"},
+        )
+        assert response.status_code == 201, response.text
+        assert proxy_client.get("/api/watches").json()[0]["title"] == "Proxy search"
+        assert proxy_client.get("/api/health", headers={"Host": "localhost"}).status_code == 200
+
+
+@pytest.mark.parametrize("origin", [
+    "https://attacker.example", "http://deals.example", "https://deals.example:8443", "null",
+])
+def test_public_origin_rejects_foreign_origins(tmp_path, origin):
+    settings = Settings(public_origin="https://deals.example")
+    with TestClient(create_app(tmp_path / "tracker.sqlite3", settings), base_url="http://deals.example") as proxy_client:
+        response = proxy_client.post("/api/watches", json={"title": "Rejected"}, headers={"Origin": origin})
+        assert response.status_code == 403
+        assert proxy_client.get("/api/watches").json() == []
+
+
+def test_public_origin_preserves_host_and_cross_site_boundaries(tmp_path):
+    settings = Settings(public_origin="https://deals.example")
+    with TestClient(create_app(tmp_path / "tracker.sqlite3", settings), base_url="http://deals.example") as proxy_client:
+        assert proxy_client.get("/api/health", headers={
+            "Host": "attacker.example", "X-Forwarded-Host": "deals.example", "X-Forwarded-Proto": "https",
+        }).status_code == 400
+        assert proxy_client.post("/api/watches", json={"title": "Cross site"}, headers={
+            "Origin": "https://deals.example", "Sec-Fetch-Site": "cross-site",
+        }).status_code == 403
+        assert proxy_client.post("/api/watches", json={"title": "Wrong host"}, headers={
+            "Host": "localhost", "Origin": "https://deals.example",
+        }).status_code == 403
+        assert proxy_client.post("/api/watches", data={"title": "Form"}, headers={
+            "Origin": "https://deals.example",
+        }).status_code == 415
+        assert proxy_client.get("/api/watches").json() == []
+
+
+@pytest.mark.parametrize("origin", [
+    "http://deals.example", "https://deals.example/path", "https://user:pass@deals.example",
+    "https://deals.example?query=1", "https://deals.example/#fragment", "https://*.example",
+    "https://deals.example https://other.example",
+])
+def test_public_origin_requires_one_https_origin(origin):
+    with pytest.raises(ValueError):
+        Settings(public_origin=origin)
+
+
 def test_disabled_runtime_cannot_activate_or_queue_checks(client):
     watch = create_watch(client, product_url="https://www.massimodutti.com/shirt", interval_hours=6)
     assert client.patch(f"/api/watches/{watch['id']}/status", json={"version": 1, "status": "active"}).status_code == 409

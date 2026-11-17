@@ -4,6 +4,8 @@ This document gives the procedure to operate Deal Tracker on a Linux server with
 
 For the functions and the settings of the app, refer to [README.md](README.md).
 
+The numbered setup below builds from source. For prebuilt GHCR images and release updates without a server checkout, use [Release Images](#15-release-images).
+
 ## Contents
 
 1. [Status](#1-status)
@@ -20,6 +22,7 @@ For the functions and the settings of the app, refer to [README.md](README.md).
 12. [Optional: configure email](#12-optional-configure-email)
 13. [Install the daily timer](#13-install-the-daily-timer)
 14. [Operation](#14-operation)
+15. [Release Images](#15-release-images)
 
 ## Conventions
 
@@ -42,8 +45,8 @@ Use this procedure with these limits:
 
 - The procedure was tested with Docker Desktop on macOS and Docker Compose 2.38. With a `linux/arm64` image, the tests covered the web health, a worker pass with collection off, the pi credential check, visible Chromium on the virtual display, the backup and restore commands and a real check. With a `linux/amd64` image under emulation, the tests covered the Python tests, the web health, visible Chromium on the virtual display, the backup command and a real check.
 - These items are not tested: deployment on a Linux server, `amd64` hardware, the pi command `/login` in the container, email through a real SMTP server, and the systemd timer.
-- There is no published image. You build the image on the server.
-- The app has no login. It accepts only loopback host names. You open the UI through an SSH tunnel. A reverse proxy is not supported.
+- Use a source build, or an image published by the [release workflow](.github/workflows/release.yml). Refer to [Release Images](#15-release-images).
+- The app has no login. By default, it accepts only loopback host names. Use an SSH tunnel, or configure a private HTTPS reverse proxy as described in [section 9.1](#91-optional-private-https-reverse-proxy).
 - The app does not send an alert when a check fails. The worker output and the UI show the result.
 - The app limits the number of checks, not the cost.
 
@@ -280,7 +283,26 @@ The build makes an image for the architecture of the server. The worker uses the
 
 If port 8765 is in use on the workstation, use a different local port. For example, use `-L 18765:127.0.0.1:8765` and open <http://127.0.0.1:18765>. If you set `DEAL_TRACKER_PORT`, use that port after `127.0.0.1:` in the `-L` value.
 
-The app accepts only the host names `localhost`, `127.0.0.1` and `[::1]`. It also rejects a change from a different origin ([api.py](deal_tracker/api.py)). Thus the SSH tunnel operates, but a LAN address or a reverse proxy does not operate.
+By default, the app accepts only the host names `localhost`, `127.0.0.1` and `[::1]`. It also rejects a change from a different origin ([api.py](deal_tracker/api.py)). Keep this default when you use the SSH tunnel.
+
+### 9.1 Optional: private HTTPS reverse proxy
+
+> **CAUTION:** The app has no login. Restrict access to a trusted LAN or VPN. The public-origin setting does not provide authentication. Do not expose the app directly to the internet.
+
+1. Set one browser-facing HTTPS origin in `.env`, for example:
+
+   ```dotenv
+   DEAL_TRACKER_PUBLIC_ORIGIN=https://deals.example.com
+   ```
+
+   Do not include credentials, a path, a query or a fragment. Include the port if the browser uses a port other than 443 ([settings.py](deal_tracker/settings.py)).
+
+2. Connect the reverse proxy to the web container through a shared private Docker network. Keep the published app port bound to loopback.
+3. Configure the proxy to preserve the browser's `Host` and `Origin` headers. For Caddy, use `reverse_proxy <web-network-alias>:8765`; do not rewrite either header. Forwarded headers do not add allowed hosts or origins ([api.py](deal_tracker/api.py)).
+4. Recreate `web`: `docker compose up -d --no-build --force-recreate --wait web`.
+5. Open the HTTPS address. Create or edit a search to verify that changes work as well as page loads.
+
+The configured hostname is added to the allowed hosts. Its HTTPS origin remains valid when the proxy uses HTTP to reach the container. Loopback health checks and the SSH tunnel remain available ([api.py](deal_tracker/api.py)).
 
 ## 10. Log in to the model provider
 
@@ -611,3 +633,37 @@ If checks fail with an authentication error, do section 10 again.
 
 1. `sudo systemctl disable --now deal-tracker-worker.timer`
 2. `docker compose stop web`
+
+## 15. Release Images
+
+### Publish a Release
+
+1. Commit and push the release workflow and the application changes to the repository. Do not include runtime data or credentials.
+2. Publish a stable GitHub Release with a tag in the form `vX.Y.Z`, for example `v0.1.0`, at the intended application commit. A tag push alone does not publish an image; prereleases are skipped.
+3. Wait for [Publish release image](.github/workflows/release.yml). It runs backend/frontend checks, then publishes `ghcr.io/sashimono-san/deal-tracker:<release-tag>` for `linux/amd64` and `linux/arm64`, with build provenance and an SBOM. It does not publish a `latest` tag.
+4. Copy the full digest reference from the workflow's job summary. Use this reference for deployment; release tags can be moved, but a digest identifies fixed content.
+
+The workflow uses the repository's `GITHUB_TOKEN` with package-write permission. It needs no personal registry token, pi login or SMTP secret. Publishing does not deploy to a server. Source: [GitHub Container registry](https://docs.github.com/en/packages/working-with-a-github-packages-registry/working-with-the-container-registry).
+
+### Use a Release Image
+
+New GHCR packages are private by default, even for public repositories. For anonymous pulls, explicitly make the package public in GitHub's package settings. Otherwise, log in on the server with a personal access token (classic) limited to `read:packages`. Enter it only in your own terminal; never put it in Compose, Git or chat.
+
+For the generic Compose file in this guide, remove `build` from `x-runtime` and omit `DEAL_TRACKER_SOURCE`. Keep all mounts, resource limits, browser security settings and `pull_policy: never`. Set this value in the operator environment file:
+
+```dotenv
+DEAL_TRACKER_IMAGE=ghcr.io/sashimono-san/deal-tracker@sha256:<digest>
+```
+
+Use the full digest from the workflow, not the placeholder. The server needs no application checkout in this mode. Keep its deployment configuration, data, seccomp profile and pi profile.
+
+For a new deployment, follow the remaining setup steps but skip the source clone and build commands. Pull before starting:
+
+```sh
+docker compose pull --policy always web worker
+docker compose up -d --no-build --wait web
+```
+
+For updates, stop the timer and wait for any worker pass to finish, make a database backup, and record the previous image reference. Change the digest, pull, recreate `web` and inspect health and a bounded check before restarting the timer. Do not use the source-pull/build steps of section 14.5 in release mode. Keep the prior image locally for rollback; schema changes may also require the prior database backup.
+
+Pi credentials remain runtime state in the worker's dedicated writable profile. Do not bake them into images, upload them to Actions, or mount a general coding-agent home directory. Use `/login` or install an approved credential in the profile with the container user's ownership.

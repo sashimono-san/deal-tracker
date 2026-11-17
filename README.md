@@ -71,7 +71,7 @@ Git ignores the runtime data, the virtual environment and the UI build output.
 
 ### Container
 
-The [Dockerfile](Dockerfile) packages the same app. [DEPLOYMENT.md](DEPLOYMENT.md) describes a server deployment with Docker Compose.
+The [Dockerfile](Dockerfile) packages the same app. [DEPLOYMENT.md](DEPLOYMENT.md) describes a server deployment with Docker Compose. The [release workflow](.github/workflows/release.yml) publishes stable GitHub Releases to GHCR; [release-image deployment](DEPLOYMENT.md#15-release-images) does not need a source checkout on the server. Credentials remain outside the image.
 
 ## Configure Collection
 

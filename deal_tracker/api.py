@@ -33,14 +33,21 @@ def create_app(database: Path | None = None, settings: Settings | None = None) -
         application.state.store = Store(database or Path(os.environ.get("DEAL_TRACKER_DB", "data/tracker.sqlite3")))
         yield
 
-    application = FastAPI(title="Deal Tracker", version="0.1.0", lifespan=lifespan, docs_url=None, redoc_url=None)
-    application.add_middleware(TrustedHostMiddleware, allowed_hosts=["localhost", "127.0.0.1", "[::1]", "testserver"])
+    application = FastAPI(title="Deal Tracker", version="1.0.0", lifespan=lifespan, docs_url=None, redoc_url=None)
+    public_origin = urlsplit(configuration.public_origin)
+    allowed_hosts = ["localhost", "127.0.0.1", "[::1]", "testserver"]
+    if public_origin.hostname:
+        allowed_hosts.append(public_origin.hostname)
+    application.add_middleware(TrustedHostMiddleware, allowed_hosts=allowed_hosts)
 
     @application.middleware("http")
     async def local_boundary(request: Request, call_next):
         if request.method not in {"GET", "HEAD", "OPTIONS"}:
             origin = request.headers.get("origin")
-            if origin and origin != f"{request.url.scheme}://{request.url.netloc}":
+            expected_origin = f"{request.url.scheme}://{request.url.netloc}"
+            if public_origin.netloc and request.url.netloc.lower().removesuffix(":443") == public_origin.netloc:
+                expected_origin = configuration.public_origin
+            if origin and origin != expected_origin:
                 return JSONResponse({"detail": "Cross-origin changes are not allowed"}, status_code=403)
             if request.headers.get("sec-fetch-site") == "cross-site":
                 return JSONResponse({"detail": "Cross-site changes are not allowed"}, status_code=403)

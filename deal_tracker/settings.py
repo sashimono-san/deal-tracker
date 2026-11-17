@@ -5,12 +5,13 @@ from pathlib import Path
 from typing import Literal
 from urllib.parse import urlsplit
 
-from pydantic import Field, SecretStr, field_validator
+from pydantic import Field, HttpUrl, SecretStr, field_validator
 
 from .models import StrictModel, public_url
 
 
 class Settings(StrictModel):
+    public_origin: str = Field(default="", max_length=2000)
     collection_enabled: bool = False
     scheduler_enabled: bool = False
     pi_executable: str = "pi"
@@ -31,6 +32,20 @@ class Settings(StrictModel):
     smtp_password: SecretStr = SecretStr("")
     email_from: str = ""
     email_to: str = ""
+
+    @field_validator("public_origin")
+    @classmethod
+    def https_public_origin(cls, value: str) -> str:
+        if not value:
+            return value
+        origin = HttpUrl(value)
+        if (
+            origin.scheme != "https" or origin.username is not None or origin.password is not None
+            or origin.path not in {None, "/"} or origin.query is not None or origin.fragment is not None
+            or "*" in (origin.host or "") or any(character.isspace() for character in value)
+        ):
+            raise ValueError("The public origin must be one HTTPS origin without a path or credentials")
+        return str(origin).removesuffix("/")
 
     @field_validator("browser_resource_origins")
     @classmethod
