@@ -104,7 +104,6 @@ For prebuilt images, use [Release Images](DEPLOYMENT.md#release-images) with [co
 | `DEAL_TRACKER_BROWSER_RESOURCE_ORIGINS` | None | Public HTTPS origins for page resources, with commas between them. The maximum is eight. The app always permits the shop origin. Example: `https://static.massimodutti.net`. |
 | `PLAYWRIGHT_BROWSERS_PATH` | Playwright cache | The browser installation directory. The container image uses `/ms-playwright`. |
 | `DEAL_TRACKER_CHECK_TIMEOUT` | `120` | The time limit of one check in seconds, from 5 to 120. |
-| `DEAL_TRACKER_DAILY_CHECK_LIMIT` | `12` | The maximum number of checks in one UTC day for all searches, from 1 to 100. |
 
 The server and the worker read exported environment variables. They do not read a dotenv file. The supplied Compose file loads `.env`; start with [.env.example](.env.example). See [Start Locally](DEPLOYMENT.md#start-locally). The **Connection status** dialog shows the problems in the settings. It does not show secrets.
 
@@ -114,7 +113,7 @@ CAUTION: Do not put keys, tokens or the contents of credential files in chat, in
 
 ## Worker
 
-The worker does one batch of checks and then stops. A batch does the queued manual checks first. Then it does the due checks of active searches, up to the daily limit. If email is on, a batch also sends the queued emails.
+The worker does one batch of checks and then stops. A batch does all queued manual checks first, then all due checks of active searches. If email is on, a batch also sends the queued emails.
 
 To start one batch:
 
@@ -128,7 +127,7 @@ To do only one check, add `--limit 1`:
 .venv/bin/python -m deal_tracker.worker --limit 1
 ```
 
-A database lock prevents two batches at the same time. The daily count stays correct after a restart. If a batch reaches the daily limit, the other due checks wait for a later batch. Manual and scheduled checks use the same daily limit. This limit counts checks. It is not a money limit.
+A database lock prevents two batches at the same time. There is no daily check quota. The daily count is for information only; it does not block manual or scheduled checks. An old `DEAL_TRACKER_DAILY_CHECK_LIMIT` environment value has no effect. Use `--limit` only when you want to stop a batch after a selected number of checks. Per-check safety limits still apply. More checks can use more model tokens; there is no app-level spending cap.
 
 To start a batch every day, use the supplied [systemd units](DEPLOYMENT.md#systemd) or the [cron alternative](DEPLOYMENT.md#cron-alternative).
 
@@ -171,7 +170,7 @@ Use **Daily checks during** to add daily checks in these periods:
 - New Year: 27 December-7 January.
 - Year start: 8-31 January.
 
-These periods are off by default. They do not state that a shop has a sale on these dates. Sale-period checks obey the start date, the pause state, the worker lock and the daily limit.
+These periods are off by default. They do not state that a shop has a sale on these dates. Sale-period checks obey the start date, the pause state and the worker lock.
 
 ## Collection
 

@@ -23,7 +23,6 @@ class Settings(StrictModel):
     browser_headless: bool = True
     browser_resource_origins: str = Field(default="", max_length=2000)
     check_timeout: int = Field(default=120, ge=5, le=120)
-    daily_check_limit: int = Field(default=12, ge=1, le=100)
     email_enabled: bool = False
     smtp_host: str = ""
     smtp_port: int = Field(default=587, ge=1, le=65535)

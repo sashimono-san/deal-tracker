@@ -5,6 +5,7 @@ from fastapi.testclient import TestClient
 
 from deal_tracker.api import create_app
 from deal_tracker.settings import Settings
+from deal_tracker.store import Store
 
 
 @pytest.fixture
@@ -249,6 +250,27 @@ def test_active_watch_and_queued_check_are_versioned_and_persistent(tmp_path, mo
         assert detail["jobs"][0]["outcome"] == "queued"
         assert detail["activation_gates"] == []
         assert restarted.get("/api/health").json()["pi_model"] == "fixture"
+
+
+def test_checks_can_be_queued_after_old_daily_allowances(tmp_path, monkeypatch):
+    monkeypatch.setenv("DEAL_TRACKER_DAILY_CHECK_LIMIT", "1")
+    monkeypatch.setattr(Settings, "collector_issues", lambda _settings: [])
+    settings = Settings.from_environment().model_copy(update={"scheduler_enabled": True})
+    database = tmp_path / "tracker.sqlite3"
+    with TestClient(create_app(database, settings)) as client:
+        watch = create_watch(client)
+        store = Store(database)
+        for _attempt in range(25):
+            job = store.claim_check(watch["id"])
+            store.finish_check(job["id"], "failed")
+        health = client.get("/api/health").json()
+        assert health["checks_today"] == 25
+        assert "daily_check_limit" not in health
+        response = client.post(
+            f"/api/watches/{watch['id']}/checks", json={"version": watch["version"]},
+        )
+        assert response.status_code == 202, response.text
+        assert response.json()["outcome"] == "queued"
 
 
 def test_exact_watch_activates_without_size_color_or_price_target(tmp_path, monkeypatch):

@@ -165,7 +165,7 @@ sudo systemctl enable --now deal-tracker-worker.timer
 systemctl list-timers deal-tracker-worker.timer
 ```
 
-The example runs at 08:00 UTC with up to 30 seconds of random delay and a catch-up pass after downtime. Edit `OnCalendar` to change it, then reload systemd and restart the timer. Increase the service's 30-minute timeout if you increase the daily check budget beyond its default 12 checks of up to 120 seconds each.
+The example runs at 08:00 UTC with up to 30 seconds of random delay and a catch-up pass after downtime. Edit `OnCalendar` to change it, then reload systemd and restart the timer. There is no daily check quota. The service's 30-minute timeout remains a host watchdog; increase it if a full queue cannot finish in that time. Per-check deadlines still apply.
 
 ### Cron Alternative
 

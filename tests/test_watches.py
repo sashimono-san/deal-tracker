@@ -135,11 +135,15 @@ def test_check_leases_prevent_overlap_and_expire_after_a_crash(store):
     assert row["outcome"] == "interrupted"
 
 
-def test_daily_check_limit_survives_restart(store):
+def test_daily_check_count_does_not_limit_checks_after_restart(store):
     watch = store.create(shirt())
-    job = store.claim_check(watch["id"], daily_limit=1)
-    store.finish_check(job["id"], "failed")
-    assert Store(store.path).claim_check(watch["id"], daily_limit=1) is None
+    for _attempt in range(25):
+        job = store.claim_check(watch["id"])
+        assert job is not None
+        store.finish_check(job["id"], "failed")
+    restarted = Store(store.path)
+    assert restarted.checks_today() == 25
+    assert restarted.claim_check(watch["id"]) is not None
 
 
 def test_activation_requires_schedule_and_editing_pauses_active_watch(store):

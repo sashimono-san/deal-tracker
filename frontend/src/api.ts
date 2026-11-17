@@ -154,7 +154,6 @@ export type Health = {
   browser_headless: boolean
   worker_last_seen: string | null
   checks_today: number
-  daily_check_limit: number
 }
 
 export const blankSpec: WatchSpec = {

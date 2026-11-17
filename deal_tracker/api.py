@@ -33,7 +33,7 @@ def create_app(database: Path | None = None, settings: Settings | None = None) -
         application.state.store = Store(database or Path(os.environ.get("DEAL_TRACKER_DB", "data/tracker.sqlite3")))
         yield
 
-    application = FastAPI(title="Deal Tracker", version="1.0.1", lifespan=lifespan, docs_url=None, redoc_url=None)
+    application = FastAPI(title="Deal Tracker", version="1.0.2", lifespan=lifespan, docs_url=None, redoc_url=None)
     public_origin = urlsplit(configuration.public_origin)
     allowed_hosts = ["localhost", "127.0.0.1", "[::1]", "testserver"]
     if public_origin.hostname:
@@ -108,7 +108,6 @@ def create_app(database: Path | None = None, settings: Settings | None = None) -
             "browser": "playwright_mcp" if configuration.browser_enabled else "http",
             "browser_headless": configuration.browser_headless,
             "worker_last_seen": store().runtime("worker_last_seen"),
-            "daily_check_limit": configuration.daily_check_limit,
             "checks_today": store().checks_today(),
         }
 
@@ -161,8 +160,6 @@ def create_app(database: Path | None = None, settings: Settings | None = None) -
         gates = collection_gates(store().get(watch_id), scheduled=False)
         if gates:
             raise Conflict("; ".join(gates))
-        if store().checks_today() >= configuration.daily_check_limit:
-            raise Conflict("Daily check limit reached; the allowance resets at midnight UTC")
         return store().queue_check(watch_id, change.version)
 
     @application.patch("/api/watches/{watch_id}/deliveries/{delivery_id}")

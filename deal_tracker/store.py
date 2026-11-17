@@ -266,10 +266,10 @@ class Store:
 
     def claim_check(
         self, watch_id: str | None = None, *, lease_seconds: int = 180,
-        daily_limit: int = 24, now: datetime | None = None,
+        now: datetime | None = None,
     ) -> dict[str, Any] | None:
-        if not 1 <= lease_seconds <= 900 or not 1 <= daily_limit <= 1000:
-            raise ValueError("Invalid check limits")
+        if not 1 <= lease_seconds <= 900:
+            raise ValueError("Invalid check lease duration")
         moment = now or datetime.now(UTC)
         timestamp = moment.isoformat()
         with self.connection() as connection:
@@ -277,13 +277,6 @@ class Store:
             if connection.execute(
                 "SELECT 1 FROM check_state WHERE lease_until > ?", (timestamp,)
             ).fetchone():
-                return None
-            count = connection.execute(
-                """SELECT COUNT(*) FROM check_jobs WHERE started_at >= ?
-                   AND outcome NOT IN ('queued', 'cancelled')""",
-                (moment.replace(hour=0, minute=0, second=0, microsecond=0).isoformat(),),
-            ).fetchone()[0]
-            if count >= daily_limit:
                 return None
             queued = None
             if watch_id is None:

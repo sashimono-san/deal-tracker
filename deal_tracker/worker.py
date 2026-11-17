@@ -44,9 +44,8 @@ def run_job(store: Store, settings: Settings, job: dict) -> dict:
 
 
 def run_due(store: Store, settings: Settings, limit: int | None = None) -> dict:
-    if limit is not None and not 1 <= limit <= 100:
-        raise ValueError("A worker pass handles one to 100 searches")
-    batch_limit = min(limit or settings.daily_check_limit, settings.daily_check_limit)
+    if limit is not None and limit < 1:
+        raise ValueError("A worker pass limit must be positive")
     with store.path.with_suffix(".worker.lock").open("a") as lock:
         try:
             fcntl.flock(lock, fcntl.LOCK_EX | fcntl.LOCK_NB)
@@ -62,11 +61,8 @@ def run_due(store: Store, settings: Settings, limit: int | None = None) -> dict:
                 "email": deliver_pending(store, settings),
             }
         completed = []
-        for _index in range(batch_limit):
-            job = store.claim_check(
-                lease_seconds=settings.check_timeout + 60,
-                daily_limit=settings.daily_check_limit,
-            )
+        while limit is None or len(completed) < limit:
+            job = store.claim_check(lease_seconds=settings.check_timeout + 60)
             if job is None:
                 break
             completed.append(run_job(store, settings, job))
@@ -81,7 +77,7 @@ def main() -> None:
     parser = argparse.ArgumentParser(description="Run one bounded daily pi collection batch")
     parser.add_argument("--database", type=Path, default=Path(os.environ.get("DEAL_TRACKER_DB", "data/tracker.sqlite3")))
     parser.add_argument("--once", action="store_true", help="Run one batch and exit (the default)")
-    parser.add_argument("--limit", type=int, choices=range(1, 101), help="Optional lower batch limit; defaults to the daily allowance")
+    parser.add_argument("--limit", type=int, help="Optional positive batch limit; defaults to all queued and due searches")
     args = parser.parse_args()
     store = Store(args.database)
     settings = Settings.from_environment()

@@ -89,24 +89,31 @@ def test_worker_reports_usage_even_when_evidence_validation_fails(runtime, monke
     assert job["effort"] == "low"
 
 
-@pytest.mark.parametrize("daily_limit, expected", [(12, 5), (3, 3)])
-def test_daily_batch_drains_due_watches_within_persistent_budget(runtime, monkeypatch, daily_limit, expected):
+@pytest.mark.parametrize("limit, expected", [(None, 25), (3, 3), (101, 25)])
+def test_batch_drains_due_watches_without_a_daily_quota(runtime, monkeypatch, limit, expected):
     store, settings, watch = runtime
-    settings = settings.model_copy(update={"daily_check_limit": daily_limit})
     watches = [watch, *[
         store.create(WatchSpec(
             title=f"Search {index}", shop_url="https://example.com", country="Austria",
             currency="EUR", interval_hours=24,
-        )) for index in range(4)
+        )) for index in range(24)
     ]]
     for current in watches:
         store.set_status(current["id"], "active", current["version"])
     monkeypatch.setattr("deal_tracker.worker.collect", lambda snapshot, request_id, configuration: CollectionResult(
         watch_version=snapshot["version"], request_id=request_id, outcome="no_change",
     ))
-    assert run_due(store, settings)["processed"] == expected
-    assert run_due(Store(store.path), settings)["processed"] == 0
-    assert store.checks_today() == expected
+    assert run_due(store, settings, limit=limit)["processed"] == expected
+    assert run_due(Store(store.path), settings)["processed"] == 25 - expected
+    assert run_due(store, settings)["processed"] == 0
+    assert store.checks_today() == 25
+
+
+@pytest.mark.parametrize("limit", [0, -1])
+def test_explicit_worker_batch_limit_must_be_positive(runtime, limit):
+    store, settings, _watch = runtime
+    with pytest.raises(ValueError, match="positive"):
+        run_due(store, settings, limit=limit)
 
 
 def test_cli_runs_once_without_an_explicit_batch_limit(tmp_path, monkeypatch, capsys):

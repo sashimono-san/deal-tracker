@@ -212,7 +212,6 @@ function App() {
 
   const pendingCheck = current?.jobs?.find(job => ['queued', 'running'].includes(job.outcome))
   const workerRecent = Boolean(health?.worker_last_seen && healthReadAt - Date.parse(health.worker_last_seen) < 36 * 60 * 60_000)
-  const atCheckLimit = Boolean(health && health.checks_today >= health.daily_check_limit)
 
   return <div className="app-shell">
     <aside className="sidebar">
@@ -251,7 +250,7 @@ function App() {
             <section className="monitoring-band" aria-label="Monitoring">
               <div className="monitoring-controls">
                 <button className="quiet small" disabled={busy || current.watch.status === 'archived' || (current.watch.status !== 'active' && current.activation_gates.length > 0)} title={current.watch.status === 'active' ? 'Pause monitoring' : current.activation_gates.join('\n') || 'Activate monitoring'} onClick={() => { void changeStatus(current.watch.status === 'active' ? 'paused' : 'active') }}>{current.watch.status === 'active' ? <CirclePause size={16} /> : <Play size={16} />}{current.watch.status === 'active' ? 'Pause monitoring' : 'Activate monitoring'}</button>
-                <button className="quiet small" disabled={busy || Boolean(pendingCheck) || atCheckLimit || current.watch.status === 'archived' || Boolean(current.check_gates?.length)} title={atCheckLimit ? 'Daily check limit reached' : current.check_gates?.join('\n') || 'Queue a check'} onClick={() => { void action(async () => {
+                <button className="quiet small" disabled={busy || Boolean(pendingCheck) || current.watch.status === 'archived' || Boolean(current.check_gates?.length)} title={current.check_gates?.join('\n') || 'Queue a check'} onClick={() => { void action(async () => {
                   await request(`/api/watches/${current.watch.id}/checks`, { method: 'POST', body: JSON.stringify({ version: current.watch.version }) })
                   await refresh(); setNotice('Check queued')
                 }) }}><Radar size={16} />Request check</button>
@@ -307,7 +306,7 @@ function App() {
     }} />}
     {connections && <Modal title="Connection status" onClose={() => setConnections(false)}><div className="dialog-body">
       <p className="source-label">{health?.browser === 'playwright_mcp' ? `Playwright MCP / ${health.browser_headless ? 'headless' : 'visible browser'}` : 'HTTP-only collector'}</p>
-      <dl className="facts"><div><dt>Harness</dt><dd>pi</dd></div><div><dt>Provider / model</dt><dd>{[health?.pi_provider, health?.pi_model].filter(Boolean).join(' / ') || 'Not configured'}</dd></div><div><dt>Reasoning effort</dt><dd>{health?.pi_thinking || 'Not configured'}</dd></div><div><dt>Worker mode</dt><dd>{health?.scheduler === 'external' ? 'Daily batch / CLI' : 'Disabled'}</dd></div><div><dt>Last worker check-in</dt><dd>{health?.worker_last_seen ? dateTime(health.worker_last_seen) : 'Never'}</dd></div><div><dt>Checks today (UTC)</dt><dd>{health?.checks_today ?? 0} / {health?.daily_check_limit ?? 12}</dd></div><div><dt>Email</dt><dd>{health?.email === 'smtp' ? 'SMTP enabled' : 'Preview only'}</dd></div></dl>
+      <dl className="facts"><div><dt>Harness</dt><dd>pi</dd></div><div><dt>Provider / model</dt><dd>{[health?.pi_provider, health?.pi_model].filter(Boolean).join(' / ') || 'Not configured'}</dd></div><div><dt>Reasoning effort</dt><dd>{health?.pi_thinking || 'Not configured'}</dd></div><div><dt>Worker mode</dt><dd>{health?.scheduler === 'external' ? 'Daily batch / CLI' : 'Disabled'}</dd></div><div><dt>Last worker check-in</dt><dd>{health?.worker_last_seen ? dateTime(health.worker_last_seen) : 'Never'}</dd></div><div><dt>Checks today (UTC)</dt><dd>{health?.checks_today ?? 0}</dd></div><div><dt>Email</dt><dd>{health?.email === 'smtp' ? 'SMTP enabled' : 'Preview only'}</dd></div></dl>
       {Boolean(health?.collector_issues?.length) && <section className="connection-issues"><h3>Collector</h3><ul>{health?.collector_issues.map(issue => <li key={issue}>{issue}</li>)}</ul></section>}
       {Boolean(health?.email_issues?.length) && <section className="connection-issues"><h3>Email</h3><ul>{health?.email_issues.map(issue => <li key={issue}>{issue}</li>)}</ul></section>}
     </div></Modal>}
