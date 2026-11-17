@@ -1,9 +1,12 @@
 import socket
+from http.server import BaseHTTPRequestHandler
+from threading import BoundedSemaphore
+from types import SimpleNamespace
 
 import pytest
 from pydantic import ValidationError
 
-from deal_tracker.browser_proxy import BrowserProxy, browser_proxy, browser_target
+from deal_tracker.browser_proxy import BrowserProxy, ProxyHandler, browser_proxy, browser_target
 from deal_tracker.fetcher import FetchBlocked
 from deal_tracker.settings import Settings
 
@@ -39,6 +42,31 @@ def test_browser_proxy_denies_loopback_over_real_connect_protocol():
         with socket.create_connection(("127.0.0.1", port), timeout=2) as client:
             client.sendall(b"CONNECT 127.0.0.1:8765 HTTP/1.1\r\nHost: 127.0.0.1\r\n\r\n")
             assert b"403" in client.recv(1024)
+
+
+@pytest.mark.parametrize("disconnect", [BrokenPipeError, ConnectionResetError])
+@pytest.mark.parametrize("status", [403, 429])
+def test_browser_proxy_error_response_tolerates_disconnected_client(monkeypatch, disconnect, status):
+    slots = BoundedSemaphore(1)
+    if status == 429:
+        slots.acquire()
+    handler = object.__new__(ProxyHandler)
+    handler.server = SimpleNamespace(origins=["https://example.com"], slots=slots)
+    handler.path = "unapproved.example:443"
+    responses = []
+
+    def disconnected_response(_handler, code, *_args, **_kwargs):
+        responses.append(code)
+        raise disconnect("Client disconnected")
+
+    monkeypatch.setattr(BaseHTTPRequestHandler, "send_error", disconnected_response)
+    handler.do_CONNECT()
+    assert responses == [status]
+    assert handler.close_connection
+    if status == 429:
+        slots.release()
+    assert slots.acquire(blocking=False)
+    slots.release()
 
 
 def test_browser_permissions_respect_robots_and_separate_resource_navigation(monkeypatch):

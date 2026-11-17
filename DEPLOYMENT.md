@@ -271,6 +271,8 @@ DEAL_TRACKER_IMAGE=ghcr.io/sashimono-san/deal-tracker@sha256:<digest>
 
 Use the full digest from a successful release workflow, not the placeholder. If `COMPOSE_FILE` already includes a proxy or another overlay, retain it and add the release override. The override removes both build definitions; it keeps volumes, resource limits and `pull_policy: never`.
 
+Stable releases also publish `ghcr.io/sashimono-san/deal-tracker:latest`. Select this tag to follow stable image updates, or use a version tag or digest to keep one release. Pulling an image does not replace a running web container; use the pull and start commands below.
+
 Wait for the image to be published. Public GHCR packages allow anonymous pulls. For private packages, log in on the server with a personal access token (classic) limited to `read:packages`. Enter it only in your own terminal, never in Compose, Git or chat. New packages are private by default; maintainers must explicitly enable public access for anonymous pulls ([GHCR documentation](https://docs.github.com/en/packages/working-with-a-github-packages-registry/working-with-the-container-registry)).
 
 For updates, do [Before Maintenance](#before-maintenance) before changing the digest. Pull explicitly and start without building:
@@ -288,7 +290,7 @@ Configure collection and verify a bounded check before enabling the scheduler. S
 
 1. Commit and push the intended application changes and [release workflow](.github/workflows/release.yml), without runtime data or credentials.
 2. Publish a stable GitHub Release tagged `vX.Y.Z` at that commit. A tag push alone does not publish an image; prereleases are skipped.
-3. Wait for **Publish release image**. It tests the backend and frontend, then publishes `linux/amd64` and `linux/arm64` images with provenance and an SBOM. There is no `latest` tag.
-4. Use the full digest reference in the workflow's job summary for deployment.
+3. Wait for **Publish release image**. It tests the backend, sandboxed MCP browser and frontend, then publishes `linux/amd64` and `linux/arm64` images with provenance and an SBOM. The version tag and `latest` refer to the same image.
+4. Use the full digest reference in the workflow's job summary for a pinned deployment, or `latest` for a deployment that follows stable releases. The included generic scheduler still uses the cached image; automatic updates require a host service that pulls and refreshes web before running the worker.
 
 The workflow uses `GITHUB_TOKEN` with package-write permission. It needs no personal registry token, pi login or SMTP secret. Credentials remain runtime state outside the image.

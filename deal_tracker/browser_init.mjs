@@ -1,4 +1,13 @@
 export default async function initialize({ page }) {
+  for (const event of ['console', 'pageerror']) {
+    const listeners = page.listeners(event)
+    for (const listener of listeners) page.removeListener(event, listener)
+    let forwarded = 0
+    page.on(event, function (...args) {
+      if (forwarded++ >= 20) return
+      for (const listener of listeners) listener.apply(this, args)
+    })
+  }
   page.on('popup', popup => { void popup.close() })
   await page.route('**/*', async route => {
     const request = route.request()

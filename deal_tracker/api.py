@@ -33,7 +33,7 @@ def create_app(database: Path | None = None, settings: Settings | None = None) -
         application.state.store = Store(database or Path(os.environ.get("DEAL_TRACKER_DB", "data/tracker.sqlite3")))
         yield
 
-    application = FastAPI(title="Deal Tracker", version="1.0.0", lifespan=lifespan, docs_url=None, redoc_url=None)
+    application = FastAPI(title="Deal Tracker", version="1.0.1", lifespan=lifespan, docs_url=None, redoc_url=None)
     public_origin = urlsplit(configuration.public_origin)
     allowed_hosts = ["localhost", "127.0.0.1", "[::1]", "testserver"]
     if public_origin.hostname:

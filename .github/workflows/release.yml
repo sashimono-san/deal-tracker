@@ -8,7 +8,7 @@ permissions:
   contents: read
 
 concurrency:
-  group: ghcr-release-${{ github.event.release.tag_name }}
+  group: ghcr-release
   cancel-in-progress: false
 
 jobs:
@@ -47,6 +47,17 @@ jobs:
           docker build --pull --target test --tag deal-tracker:release-test .
           docker run --rm --network none deal-tracker:release-test
             docker run --rm --network none deal-tracker:release-test ruff check --no-cache .
+
+      - name: Test the sandboxed MCP browser
+        run: |
+          docker run --rm --init --network none --read-only \
+            --tmpfs /tmp:rw,nosuid,nodev,size=128m \
+            --cap-drop ALL --security-opt no-new-privileges:true \
+            --security-opt "seccomp=${GITHUB_WORKSPACE}/deploy/chromium-seccomp.json" \
+            --pids-limit 256 --memory 2g --cpus 2 -e HOME=/tmp \
+            deal-tracker:release-test xvfb-run --auto-servernum \
+            --server-args="-screen 0 1280x800x24 -nolisten tcp" \
+            node --test tests/browser.test.mjs
 
       - name: Test and lint the frontend image
         run: |
@@ -91,7 +102,9 @@ jobs:
           target: runtime
           platforms: linux/amd64,linux/arm64
           push: true
-          tags: ${{ needs.verify.outputs.image }}:${{ needs.verify.outputs.version }}
+          tags: |
+            ${{ needs.verify.outputs.image }}:${{ needs.verify.outputs.version }}
+            ${{ needs.verify.outputs.image }}:latest
           labels: |
             org.opencontainers.image.source=${{ github.server_url }}/${{ github.repository }}
             org.opencontainers.image.revision=${{ needs.verify.outputs.revision }}
@@ -110,5 +123,6 @@ jobs:
           {
             printf '## Release image\n\n'
             printf 'Tag: %s:%s\n\n' "$IMAGE" "$VERSION"
+            printf 'Auto-update tag: %s:latest\n\n' "$IMAGE"
             printf 'Deploy this digest:\n\n    %s@%s\n' "$IMAGE" "$DIGEST"
           } >> "$GITHUB_STEP_SUMMARY"

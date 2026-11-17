@@ -67,6 +67,12 @@ class ProxyHandler(BaseHTTPRequestHandler):
     def log_message(self, *_args):
         pass
 
+    def send_error(self, code, message=None, explain=None):
+        try:
+            super().send_error(code, message, explain)
+        except (BrokenPipeError, ConnectionResetError):
+            self.close_connection = True
+
     def do_POST(self):
         allowed = False
         try:

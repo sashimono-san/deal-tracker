@@ -14,16 +14,20 @@ export default function registerCollector(pi) {
   let fetches = 0
   let turns = 0
   let finished = false
+  const maxTurns = 8
 
   pi.on('session_start', () => pi.setActiveTools(tools))
   pi.on('session_shutdown', async () => { await browser?.close() })
+  pi.on('turn_end', () => {
+    if (turns >= maxTurns - 1) pi.setActiveTools(['finish_collection'])
+  })
   pi.on('tool_call', event => {
     if (!tools.includes(event.toolName)) {
       return { block: true, reason: 'Only collection tools are permitted', terminate: true }
     }
   })
   pi.on('before_provider_request', (_event, context) => {
-    if (++turns > 8) {
+    if (++turns > maxTurns) {
       context.abort()
       throw new Error('Collection exceeded its model-turn limit')
     }

@@ -1,9 +1,39 @@
 import assert from 'node:assert/strict'
+import { EventEmitter } from 'node:events'
 import { mkdtemp, rm, writeFile } from 'node:fs/promises'
 import { tmpdir } from 'node:os'
 import { join } from 'node:path'
 import test from 'node:test'
+import initialize from '../deal_tracker/browser_init.mjs'
 import { BrowserSession, elementReference } from '../deal_tracker/browser_session.mjs'
+
+test('page logging stays bounded without changing other events or request interception', async () => {
+  const page = new EventEmitter()
+  let routing
+  page.route = async (pattern, handler) => { routing = { pattern, handler } }
+  const consoleMessages = []
+  const pageErrors = []
+  let responses = 0
+  page.on('console', function (message) {
+    assert.equal(this, page)
+    consoleMessages.push(message)
+  })
+  page.on('pageerror', error => pageErrors.push(error))
+  page.on('response', () => { responses++ })
+  await initialize({ page })
+  for (let index = 0; index < 3000; index++) {
+    page.emit('console', `Blocked request ${index}`)
+    page.emit('pageerror', new Error(`Page error ${index}`))
+  }
+  page.emit('response', {})
+  assert.equal(consoleMessages.length, 20)
+  assert.equal(pageErrors.length, 20)
+  assert.equal(consoleMessages[0], 'Blocked request 0')
+  assert.equal(consoleMessages.at(-1), 'Blocked request 19')
+  assert.equal(responses, 1)
+  assert.equal(routing.pattern, '**/*')
+  assert.equal(typeof routing.handler, 'function')
+})
 
 test('browser references accept frame-qualified IDs but not arbitrary selectors', () => {
   for (const ref of ['e24', 'f2e24']) assert.equal(elementReference.test(ref), true)

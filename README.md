@@ -197,6 +197,8 @@ The collector cannot use login, account, cart or checkout controls. It cannot us
 
 The browser connects through a local proxy ([browser_proxy.py](deal_tracker/browser_proxy.py)). The proxy permits only HTTPS connections to the shop and to the resource origins that you set. These hosts must have public addresses. [browser_init.mjs](deal_tracker/browser_init.mjs) obeys `robots.txt` and keeps navigation in the shop. It blocks images, media and fonts, and it closes pop-up windows. The browser has no other web access.
 
+The browser forwards only the first 20 console messages and 20 page errors from each page. Repeated errors cannot fill the MCP log queue.
+
 If a shop loads page resources from a different host, add that origin to `DEAL_TRACKER_BROWSER_RESOURCE_ORIGINS`.
 
 #### Linux Without a Screen
@@ -226,6 +228,8 @@ Each check has these limits:
 - 8 model turns.
 - 5 observations.
 - The time limit in `DEAL_TRACKER_CHECK_TIMEOUT`.
+
+The final model turn permits only `finish_collection`, so browsing cannot use every turn without leaving a turn for the result. The result can still be partial or blocked; it must pass the same evidence checks.
 
 ### Evidence
 

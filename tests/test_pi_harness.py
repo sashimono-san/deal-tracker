@@ -211,8 +211,9 @@ def test_usage_counts_only_final_messages_and_keeps_caches_separate():
 
 
 @pytest.mark.parametrize("browser_enabled", [False, True])
+@pytest.mark.parametrize("final_turn_only", [False, True])
 @pytest.mark.skipif(not shutil.which("pi"), reason="Optional local pi CLI integration")
-def test_installed_pi_uses_only_collector_tools_with_local_fake_model(tmp_path, browser_enabled):
+def test_installed_pi_uses_only_collector_tools_with_local_fake_model(tmp_path, browser_enabled, final_turn_only):
     requests = []
 
     class ModelHandler(BaseHTTPRequestHandler):
@@ -222,8 +223,9 @@ def test_installed_pi_uses_only_collector_tools_with_local_fake_model(tmp_path, 
         def do_POST(self):
             payload = json.loads(self.rfile.read(int(self.headers["Content-Length"])))
             requests.append(payload)
-            first = len(requests) == 1
-            arguments = {"url": "https://127.0.0.1/private"} if first else {
+            active_tools = {tool["function"]["name"] for tool in payload["tools"]}
+            finish = len(requests) > 1 and (not final_turn_only or active_tools == {"finish_collection"})
+            arguments = {"url": "https://127.0.0.1/private"} if not finish else {
                 "schema_version": 1, "watch_version": 1, "request_id": "fixture-request",
                 "outcome": "blocked", "diagnostics": "Local fixture: private URL blocked",
                 "observations": [],
@@ -235,7 +237,7 @@ def test_installed_pi_uses_only_collector_tools_with_local_fake_model(tmp_path, 
                 {"index": 0, "delta": {"role": "assistant", "tool_calls": [{
                     "index": 0, "id": f"call_{len(requests)}", "type": "function",
                     "function": {
-                        "name": "fetch_shop_page" if first else "finish_collection",
+                        "name": "finish_collection" if finish else "fetch_shop_page",
                         "arguments": json.dumps(arguments),
                     },
                 }]}, "finish_reason": None},
@@ -270,21 +272,27 @@ def test_installed_pi_uses_only_collector_tools_with_local_fake_model(tmp_path, 
     )
     try:
         result = collect(watch, "fixture-request", settings)
+    except ExecutionFailure as error:
+        toolsets = [[tool["function"]["name"] for tool in payload["tools"]] for payload in requests]
+        raise AssertionError(f"Collector failed with outgoing toolsets: {toolsets}") from error
     finally:
         server.shutdown()
         server.server_close()
         thread.join(timeout=2)
     assert result.outcome == "blocked"
-    assert len(requests) == 2
+    expected_calls = 8 if final_turn_only else 2
+    assert len(requests) == expected_calls
     assert result._usage == {
-        "model_calls": 2, "reported_calls": 2, "complete": True,
-        "input_tokens": 3000, "output_tokens": 240, "cache_read_tokens": 1000,
-        "cache_write_tokens": 0, "total_tokens": 4240,
+        "model_calls": expected_calls, "reported_calls": expected_calls, "complete": True,
+        "input_tokens": 1500 * expected_calls, "output_tokens": 120 * expected_calls,
+        "cache_read_tokens": 500 * expected_calls, "cache_write_tokens": 0,
+        "total_tokens": 2120 * expected_calls,
     }
-    for payload in requests:
-        assert {tool["function"]["name"] for tool in payload["tools"]} == {
+    for index, payload in enumerate(requests):
+        expected_tools = {"finish_collection"} if final_turn_only and index == 7 else {
             "fetch_shop_page", "finish_collection", *({"browser_action"} if browser_enabled else set()),
         }
+        assert {tool["function"]["name"] for tool in payload["tools"]} == expected_tools
         schema = next(tool["function"]["parameters"] for tool in payload["tools"] if tool["function"]["name"] == "finish_collection")
         assert "shop_research" in schema["properties"]
     assert ("outside the selected HTTPS shop" if browser_enabled else "Private network addresses") in json.dumps(requests[-1]["messages"])

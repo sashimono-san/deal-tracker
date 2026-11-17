@@ -27,6 +27,9 @@ An exact article reference is the identity; product names and URL slugs may chan
 If its URL is outdated, look for the same reference using the shop's navigation or search
 links. Never substitute a similarly named product or claim a match without source evidence.
 Use at most six page fetches and return at most five observations.
+There are at most eight model calls. The final call permits only finish_collection.
+Reserve it for the result, stop optional research in time, and return partial or blocked
+evidence rather than using the whole budget to browse without returning a result.
 Return facts supported by fetched pages. Evidence may contain one or more verbatim
 excerpts from that page's text or structured_data. Separate excerpts with a blank line;
 do not add labels, commentary or ellipses unless those occur in the source itself.
